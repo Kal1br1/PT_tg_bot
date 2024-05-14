@@ -1,0 +1,81 @@
+- name: Обновление пакетов apt
+  hosts: all
+  become: yes
+  
+  tasks:
+    - name: Обновление кэша apt
+      apt: 
+        update_cache: yes
+        cache_valid_time: 3600
+
+- name: Настройка postgresql db
+  hosts: host_db
+  become: yes
+
+  tasks:
+    - name: Установка неоходимых пакетов для db
+      apt:
+        name:
+          - postgresql-15
+          - postgresql-contrib
+          - python3-psycopg2
+        state: latest
+    - name: Перенесение конфигов
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        force: yes
+      loop:
+        - { src: 'pg_hba.conf', dest: '/etc/postgresql/15/main/pg_hba.conf' }
+        - { src: 'config-postgresql', dest: '/etc/postgresql/15/main/postgresql.conf' }
+    - name: Создание БД и пользователя для репликации
+      shell: |
+        sudo -u postgres psql -c "CREATE USER repl_user WITH REPLICATION ENCRYPTED PASSWORD '13579';"
+        sudo -u postgres psql -c "ALTER ROLE postgres PASSWORD 'Qq12345';"
+        sudo -u postgres psql -c "CREATE DATABASE email_phone;"
+        sudo -u postgres psql -d email_phone -c "CREATE TABLE emails (ID serial PRIMARY KEY, email VARCHAR(255) NOT NULL);"
+        sudo -u postgres psql -d email_phone -c "CREATE TABLE phones (ID serial PRIMARY KEY, phone_number VARCHAR(20) NOT NULL);"
+    - name: Перезапуск БД для внесения изменений
+      command: systemctl restart postgresql
+
+- name: Настройка postgresql db_repl
+  hosts: host_repl_db
+  become: yes
+  tasks:
+    - name: Установка неоходимых пакетов для repl_db
+      apt:
+        name:
+          - postgresql-15
+          - postgresql-contrib
+          - python3-psycopg2
+        state: latest
+    - name: Репликация
+      shell: |
+        systemctl stop postgresql
+        rm -rf /var/lib/postgresql/15/main/*
+        pg_basebackup -R -h 192.168.0.100 -U repl_user -D /var/lib/postgresql/15/main -P
+        systemctl start postgresql
+
+- name: Установка необходимых пакетов для запуска tg бота
+  hosts: host_bot
+  become: yes
+
+  tasks:
+    - name: Установка пакета git
+      apt:
+        name: git
+        state: latest
+    - name: Установка python3-venv 
+      apt:
+        name: python3-venv
+        state: latest
+    - name: Python venv
+      shell: |
+        python3 -m venv venv
+        ./venv/bin/pip install paramiko psycopg2 python-dotenv python-telegram-bot==13.7
+    - name: Клонирование репозитория 
+      command: git clone -b ansible https://github.com/Kal1br1/PT_tg_bot.git
+    - name: Добавление файла окружения
+      command: cp /home/ansible/PT_tg_bot/ansible/pgpass /home/ansible/PT_tg_bot/.env
+    - name: Запуск бота
+      command: sudo ./venv/bin/python /home/ansible/PT_tg_bot/bot/bot.py
