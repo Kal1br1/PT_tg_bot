@@ -16,18 +16,18 @@ logger = logging.getLogger(__name__)
 
 dotenv.load_dotenv("../.env")
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
-host = os.getenv('HOST')
-port = int(os.getenv('PORT'))
-username = os.getenv('USER')
-password = os.getenv('PASSWORD')
+host = os.getenv('RM_HOST')
+port = int(os.getenv('RM_PORT'))
+username = os.getenv('RM_USER')
+password = os.getenv('RM_PASSWORD')
 
-user_db = os.getenv('USER_DB')
-password_db = os.getenv('PASSWORD_DB')
-host_db = os.getenv('HOST_DB')
-port_db = os.getenv('PORT_DB')
-database = os.getenv('DATABASE')
+user_db = os.getenv('DB_USER')
+password_db = os.getenv('DB_PASSWORD')
+host_db = os.getenv('DB_HOST')
+port_db = os.getenv('DB_PORT')
+database = os.getenv('DB_DATABASE')
 
 
 client = paramiko.SSHClient()
