@@ -326,7 +326,7 @@ def findPackage(update: Update, context):
 
 def getReplInfo(update: Update, context):
     if not isConnected(update, context): return
-    update.message.reply_text(getData("zgrep 'replication' /var/log/postgresql/postgresql-16-main.log* | head -15", update, context),
+    update.message.reply_text(getData("docker logs db 2>&1 | grep 'replication'", update, context),
                               parse_mode="MarkdownV2")
 def getInfoBD(table):
     connection = None
