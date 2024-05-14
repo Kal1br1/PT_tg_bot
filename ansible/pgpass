@@ -7,3 +7,4 @@ DB_USER = "postgres"
 DB_PASSWORD = "Qq12345"
 DB_HOST = "192.168.0.106"
 DB_PORT = 5432
+DB_DATABASE = "email_phone"
