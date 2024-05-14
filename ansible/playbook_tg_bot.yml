@@ -53,7 +53,7 @@
       shell: |
         systemctl stop postgresql
         rm -rf /var/lib/postgresql/15/main/*
-        pg_basebackup -R -h 192.168.0.100 -U repl_user -D /var/lib/postgresql/15/main -P
+        pg_basebackup -R -h 192.168.0.106 -U repl_user -D /var/lib/postgresql/15/main -P
         systemctl start postgresql
 
 - name: Установка необходимых пакетов для запуска tg бота
