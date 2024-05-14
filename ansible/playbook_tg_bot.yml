@@ -70,6 +70,6 @@
     - name: Клонирование репозитория 
       command: git clone -b ansible https://github.com/Kal1br1/PT_tg_bot.git /home/test/PT_tg_bot
     - name: Добавление файла окружения
-      command: cp /home/test/PT_tg_bot/ansible/pgpass /home/test/PT_tg_bot/devops_bot/.env
+      command: cp /home/test/PT_tg_bot/ansible/pgpass /home/test/PT_tg_bot/devops_bot/bot/.env
     - name: Запуск бота
       command: python3 /home/test/PT_tg_bot/devops_bot/bot/bot.py
