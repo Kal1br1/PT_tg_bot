@@ -14,7 +14,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-dotenv.load_dotenv("../.env")
+dotenv.load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
 

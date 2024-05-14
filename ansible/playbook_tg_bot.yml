@@ -59,23 +59,17 @@
 - name: Установка необходимых пакетов для запуска tg бота
   hosts: host_bot
   become: yes
-
   tasks:
     - name: Установка пакета git
       apt:
         name: git
         state: latest
-    - name: Установка python3-venv 
-      apt:
-        name: python3-venv
-        state: latest
-    - name: Python venv
-      shell: |
-        python3 -m venv venv
-        ./venv/bin/pip install paramiko psycopg2 python-dotenv python-telegram-bot==13.7
+    - name: Установка библиотек для бота
+      pip:
+        name: paramiko, psycopg2, python-dotenv, python-telegram-bot==13.7  
     - name: Клонирование репозитория 
-      command: git clone -b ansible https://github.com/Kal1br1/PT_tg_bot.git
+      command: git clone -b ansible https://github.com/Kal1br1/PT_tg_bot.git /home/test/PT_tg_bot
     - name: Добавление файла окружения
-      command: cp /home/ansible/PT_tg_bot/ansible/pgpass /home/ansible/PT_tg_bot/.env
+      command: cp /home/test/PT_tg_bot/ansible/pgpass /home/test/PT_tg_bot/devops_bot/.env
     - name: Запуск бота
-      command: sudo ./venv/bin/python /home/ansible/PT_tg_bot/bot/bot.py
+      command: python3 /home/test/PT_tg_bot/devops_bot/bot/bot.py
