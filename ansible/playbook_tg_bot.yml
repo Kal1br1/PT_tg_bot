@@ -20,23 +20,94 @@
           - postgresql-contrib
           - python3-psycopg2
         state: latest
-    - name: Перенесение конфигов
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        force: yes
-      loop:
-        - { src: 'pg_hba.conf', dest: '/etc/postgresql/15/main/pg_hba.conf' }
-        - { src: 'config-postgresql', dest: '/etc/postgresql/15/main/postgresql.conf' }
-    - name: Создание БД и пользователя для репликации
-      shell: |
-        sudo -u postgres psql -c "CREATE USER repl_user WITH REPLICATION ENCRYPTED PASSWORD '13579';"
-        sudo -u postgres psql -c "ALTER ROLE postgres PASSWORD 'Qq12345';"
-        sudo -u postgres psql -c "CREATE DATABASE email_phone;"
-        sudo -u postgres psql -d email_phone -c "CREATE TABLE emails (ID serial PRIMARY KEY, email VARCHAR(255) NOT NULL);"
-        sudo -u postgres psql -d email_phone -c "CREATE TABLE phones (ID serial PRIMARY KEY, phone_number VARCHAR(20) NOT NULL);"
+
+    - name: Получение пути до pg_hba.conf
+      command: sudo -u "{{DB_USER}}" psql -Atc "SHOW hba_file;"
+      register: hba_path
+
+    - name: Получение пути до файла конфигурации
+      command: sudo -u "{{DB_USER}}" psql -Atc "SHOW config_file;"
+      register: config_path
+
+    - name: Изменение pg_hba
+      blockinfile:
+        create: true
+        path: "{{hba_path.stdout}}"
+        block: |
+          local all {{DB_USER}} peer
+          host all all 0.0.0.0/0 password
+          host replication {{DB_REPL_USER}} {{DB_REPL_HOST}}/24 trust
+
+    - name: Создание директории для архивации
+      ansible.builtin.file:
+        path: /oracle/pg_data/archive
+        owner: postgres
+        group: postgres
+        state: directory
+
+    - name: Изменение postgresql.conf
+      blockinfile:
+        create: true
+        path: "{{config_path.stdout}}"
+        block: | 
+          listen_addresses = '*'
+          port = {{DB_PORT}}
+          logging_collector = on
+          log_directory = '/var/log/postgresql'
+          log_filename = 'postgresql.log'
+          log_file_mode = 0644
+          archive_mode = on
+          archive_command = 'cp %p /oracle/pg_data/archive/%f'
+          max_wal_senders = 10
+          wal_level = replica
+          wal_log_hints = on
+          log_replication_commands = on
+
+    - name: Изменение пароля пользователю БД
+      become_user: "{{DB_USER}}"
+      community.postgresql.postgresql_user:
+        name: "{{DB_USER}}"
+        password: "{{DB_PASSWORD}}"
+
+    - name: Создание пользователя для репликации
+      become_user: "{{DB_USER}}"
+      community.postgresql.postgresql_user:
+        name: "{{DB_REPL_USER}}"
+        password: "{{DB_REPL_PASSWORD}}"
+        role_attr_flags: REPLICATION
+
+    - name: Создание БД
+      become_user: "{{DB_USER}}"
+      community.postgresql.postgresql_db:
+        name: "{{DB_DATABASE}}"
+
+    - name: Создание таблицы emails
+      become_user: "{{DB_USER}}"
+      community.postgresql.postgresql_table:
+        db: "{{DB_DATABASE}}"
+        name: emails
+        columns:
+          - id serial primary key
+          - email varchar(255) not null
+
+    - name: Создание таблицы phones
+      become_user: "{{DB_USER}}"
+      community.postgresql.postgresql_table:
+        db: "{{DB_DATABASE}}"
+        name: phones
+        columns:
+          - id serial primary key
+          - phone_number varchar(255) not null
+
     - name: Перезапуск БД для внесения изменений
       command: systemctl restart postgresql
+      environment:
+        DB_USER: "{{DB_USER}}"
+        DB_PASSWORD: "{{DB_PASSWORD}}"
+        DB_REPL_USER: "{{DB_REPL_USER}}"
+        DB_REPL_PASSWORD: "{{DB_REPL_PASSWORD}}"
+        DB_REPL_HOST: "{{DB_REPL_HOST}}"
+        DB_DATABASE: "{{DB_DATABASE}}"
 
 - name: Настройка postgresql db_repl
   hosts: host_repl_db
@@ -49,27 +120,108 @@
           - postgresql-contrib
           - python3-psycopg2
         state: latest
-    - name: Репликация
-      shell: |
-        systemctl stop postgresql
-        rm -rf /var/lib/postgresql/15/main/*
-        pg_basebackup -R -h 192.168.0.106 -U repl_user -D /var/lib/postgresql/15/main -P
-        systemctl start postgresql
 
-- name: Установка необходимых пакетов для запуска tg бота
+    - name: Получение пути до data_directory
+      command: sudo -u "{{DB_USER}}" psql -Atc "SHOW data_directory;"
+      register: data_directory
+
+    - name: Остановка PostgreSQL
+      systemd:
+        name: postgresql
+        state: stopped
+   
+    - name: Очистка директории
+      file:
+        state: "{{item}}"
+        path: "{{data_directory.stdout}}"
+        owner: postgres
+        group: postgres
+        mode: "0750"
+      with_items:
+        - absent
+        - directory
+
+    - name: Backup файлов
+      become_user: "{{DB_USER}}"
+      command: pg_basebackup -R -h {{DB_HOST}} -U {{DB_REPL_USER}} -D {{data_directory.stdout}} -P
+
+    - name: Старт PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+
+      environment:
+        DB_USER: "{{DB_USER}}"
+        DB_HOST: "{{DB_HOST}}"
+        DB_REPL_USER: "{{DB_REPL_USER}}"
+        DB_REPL_HOST: "{{DB_REPL_HOST}}"
+        DB_REPL_PORT: "{{DB_REPL_PORT}}"
+      
+
+- name: Установка и запуск бота
   hosts: host_bot
   become: yes
   tasks:
-    - name: Установка пакета git
+    - name: Установка пакетов для функционирования бота
       apt:
-        name: git
+        name: 
+          - postgresql-contrib
+          - postgresql-common
+          - python3
+          - python3-dev
+          - python3-pip
+          - git
         state: latest
     - name: Установка библиотек для бота
       pip:
-        name: paramiko, psycopg2, python-dotenv, python-telegram-bot==13.7  
+        name: 
+          - paramiko
+          - psycopg2-binary
+          - python-dotenv
+          - python-telegram-bot==13.7
+    - name: Создание директории для бота
+      file:
+        path: /srv/devops_bot
+        owner: ansible
+        group: ansible
+        state: directory
+        mode: '0700'
+    
     - name: Клонирование репозитория 
-      command: git clone -b ansible https://github.com/Kal1br1/PT_tg_bot.git /home/test/PT_tg_bot
-    - name: Добавление файла окружения
-      command: cp /home/test/PT_tg_bot/ansible/pgpass /home/test/PT_tg_bot/devops_bot/bot/.env
-    - name: Запуск бота
-      command: python3 /home/test/PT_tg_bot/devops_bot/bot/bot.py
+      git:
+        repo: https://github.com/Kal1br1/PT_tg_bot.git
+        dest: /srv/devops_bot
+    
+    - name: Копирование .env файла для бота на удаленный хост
+      copy:
+        src: .env
+        dest: /srv/devops_bot/.env
+        mode: "0700"
+
+    - name: Создание systemd-юнита для бота
+      template:
+        src: telegram-bot.service.j2
+        dest: /etc/systemd/system/telegram-bot.service
+        mode: "0700"
+      vars:
+        DOTENV_PATH: /srv/devops_bot/.env
+      environment:
+        TOKEN: "{{TOKEN}}"
+        RM_HOST: "{{RM_HOST}}"
+        RM_PORT: "{{RM_PORT}}"
+        RM_USER: "{{RM_USER}}"
+        RM_PASSWORD: "{{RM_PASSWORD}}"
+        DB_USER: "{{DB_USER}}"
+        DB_PASSWORD: "{{DB_PASSWORD}}"
+        DB_HOST: "{{DB_HOST}}"
+        DB_PORT: "{{DB_PORT}}"
+        DB_DATABASE: "{{DB_DATABASE}}"
+        
+
+    - name: Запуск сервиса
+      systemd:
+        name: telegram-bot
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
