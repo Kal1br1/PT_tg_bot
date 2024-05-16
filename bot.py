@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import logging
 import paramiko
 import os
@@ -331,7 +330,7 @@ def getReplInfo(update: Update, context):
     try:
         client.connect(hostname=host_db, username=db_host_user, password=db_host_password, port=port)
         stdin, stdout, stderr = client.exec_command("grep -i \"repl\" /var/log/postgresql/postgresql.log | tail -n 20")
-        data = stdout.read()
+        data = stdout.read().decode('utf-8')
         normal_data = str(data).replace('\\n', '\n').replace('\\t', '\t')[2:-1]
         update.message.reply_text(f"```\n{normal_data}```", parse_mode="MarkdownV2")
     except (Exception, Error) as error:
