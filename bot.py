@@ -329,7 +329,7 @@ def findPackage(update: Update, context):
 def getReplInfo(update: Update, context):
     try:
         client.connect(hostname=host_db, username=db_host_user, password=db_host_password, port=port)
-        stdin, stdout, stderr = client.exec_command("grep -i \"repl\" /var/log/postgresql/postgresql.log | tail -n 20")
+        stdin, stdout, stderr = client.exec_command("grep -i \"repl\" /var/log/postgresql/postgresql.log | tail -n 10")
         data = stdout.read()
         normal_data = str(data).replace('\\n', '\n').replace('\\t', '\t')[2:-1]
         update.message.reply_text(f"```\n{normal_data}```", parse_mode="MarkdownV2")
