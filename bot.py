@@ -29,6 +29,8 @@ host_db = os.getenv('DB_HOST')
 port_db = os.getenv('DB_PORT')
 database = os.getenv('DB_DATABASE')
 
+db_host_user = os.getenv('DB_HOST_USER')
+db_host_password = os.getenv('DB_HOST_PASSWORD')
 
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -325,9 +327,18 @@ def findPackage(update: Update, context):
 
 
 def getReplInfo(update: Update, context):
-    if not isConnected(update, context): return
-    update.message.reply_text(getData("zgrep 'replication' /var/log/postgresql/postgresql-16-main.log* | head -15", update, context),
-                              parse_mode="MarkdownV2")
+    try:
+        client.connect(hostname=host, username=db_host_user, password=db_host_password, port=port)
+        stdin, stdout, stderr = client.exec_command("grep -i \"repl\" /var/log/postgresql/postgresql.log | tail -n 20")
+        data = stdout.read()
+        normal_data = str(data).replace('\\n', '\n').replace('\\t', '\t')[2:-1]
+        update.message.reply_text(f"```\n{normal_data}```", parse_mode="MarkdownV2")
+    except (Exception, Error) as error:
+        update.message.reply_text("Произошла ошибка при получении информации о репликации")
+        logging.error("Ошибка при выполнении команды: %s", error)
+    finally:
+        client.close()
+        logging.info("Соединение с SSH закрыто")
 def getInfoBD(table):
     connection = None
     data = []
@@ -444,4 +455,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
