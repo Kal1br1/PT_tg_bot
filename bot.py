@@ -328,7 +328,7 @@ def findPackage(update: Update, context):
 
 def getReplInfo(update: Update, context):
     try:
-        client.connect(hostname=host, username=db_host_user, password=db_host_password, port=port)
+        client.connect(hostname=host_db, username=db_host_user, password=db_host_password, port=port)
         stdin, stdout, stderr = client.exec_command("grep -i \"repl\" /var/log/postgresql/postgresql.log | tail -n 20")
         data = stdout.read()
         normal_data = str(data).replace('\\n', '\n').replace('\\t', '\t')[2:-1]
